@@ -1,6 +1,6 @@
 mod libs;
 use libs::arguments::Args;
-use libs::requests::{login};
+use libs::requests::{login,logout,exec};
 use libs::encryption::encrypt;
 use clap::Parser;
 use std::process::exit;
@@ -31,12 +31,27 @@ fn main() {
     headers();
 
     let authenticated = match login(&args.hostname,&args.username,&args.password,proxy,encrypt) {
-        Ok(auth) => auth,
+        Ok(auth) => {   
+            println!("[+] Logged in");
+            auth
+        }
         Err(err) => {
-            println!("unable to log in due to error: {err}");
+            println!("[-] unable to log in due to error: {err}");
             exit(1);
         }
     };
+
+    let logged_out = match logout() {
+        Ok(_) => {
+            println!("[+] Logged out :)");
+        }
+        Err(err) => {
+            println!("[-] unable to logout in due to error: {err}");
+            exit(1);
+        }
+    };
+
+
 
 
 }

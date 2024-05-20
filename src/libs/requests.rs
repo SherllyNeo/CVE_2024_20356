@@ -112,5 +112,12 @@ pub fn login(target: &str, username: &str, password: &str, proxy: Option<&str>, 
           
 }
 
+pub fn logout() -> Result<()> {
+    todo!();
+}
+
+pub fn exec() -> Result<()> {
+    todo!();
+}
 
 
