@@ -2,8 +2,11 @@ use regex::Regex;
 use reqwest;
 use elementtree::Element;
 use anyhow::{Error, Result, Context};
+use crate::libs::arguments::Actions;
 use std::collections::HashMap;
 use reqwest::blocking::Client;
+use crate::libs::encryption::hash_fnv32;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 
 pub struct Authenticated {
     pub cookie: Option<String>,
@@ -36,7 +39,9 @@ fn build_client(proxy: Option<&str>) -> Result<Client> {
             .proxy(proxy_https);
     }
 
-    let client = client_builder.build()?;
+    let client = client_builder
+        .danger_accept_invalid_certs(true)
+        .build()?;
 
     Ok(client)
 }
@@ -146,13 +151,44 @@ pub fn logout(target: &str, sid_value: &str,proxy: Option<&str>) -> Result<()> {
     todo!();
 }
 
-fn query() -> Result<()>{
-    todo!();
+fn query(target: &str, cookie: &str, sid: &str, input_cmd: &str, proxy: Option<&str>) -> Result<Element>{
+    let url = format!("https://{target}");
+
+    let cmd = utf8_percent_encode(input_cmd, NON_ALPHANUMERIC).to_string();
+
+    let payload = HashMap::from([
+        ("sessionID",sid),
+        ("queryString",&cmd)
+    ]);
+
+    let client = build_client(proxy)?;
+
+    let client_base = client
+          .post(&url)
+          .header("Referer",format!("https://{target}/index.html"))
+          .header("Cookie",format!("sessionCookie={cookie}"))
+          .header("Accept-Encoding","identity")
+          .header("Cspg_var",hash_fnv32(sid,input_cmd).context("unable to hash sid and input")?)
+          .json(&payload);
+
+    let response = client_base.send()?;
+
+    if response.status().is_success() {
+        println!("success sending login request");
+    } else if response.status().is_server_error() {
+        return Err(Error::msg("server error!"));
+    } else {
+        return Err(Error::msg(format!("Something bad happened. Status: {:?}", response.status())));
+    }
+
+
+    let response_raw = response.bytes()?.to_vec();
+
+
+    let root = Element::from_reader(response_raw.as_slice())?;
+    Ok(root)
 }
 
-fn query_raw() -> Result<()>{
-    todo!();
-}
 
 fn exec() -> Result<()> {
     todo!();
@@ -176,6 +212,16 @@ pub fn run_shell() -> Result<()>{
 
 pub fn run_dance() -> Result<()>{
     todo!();
+}
+
+pub fn handle_action(action: &Actions) -> Result<()> {
+    match action {
+        Actions::Test => run_test()?,
+        Actions::Cmd => run_command()?,
+        Actions::Shell => run_shell()?,
+        Actions::Dance => run_dance()?
+    }
+    Ok(())
 }
 
 

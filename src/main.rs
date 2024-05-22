@@ -1,7 +1,7 @@
 mod libs;
 use libs::arguments::Args;
 use libs::arguments::Actions;
-use libs::actions::{login,logout};
+use libs::actions::{login,logout,handle_action};
 use libs::encryption::encrypt;
 use clap::Parser;
 use std::process::exit;
@@ -42,11 +42,9 @@ fn main() {
         }
     };
 
-    match args.action {
-        Actions::Test => println!("test"),
-        Actions::Cmd => println!("cmd {:?}",args.cmd),
-        Actions::Shell => println!("Shell"),
-        Actions::Dance => println!("Dance"),
+    match handle_action(&args.action) {
+        Ok(_) => println!("[+] {:?} worked",&args.action),
+        Err(err) => eprintln!("[-] {:?} failed: {:?}",&args.action,err)
     }
 
     match logout(&args.hostname,&authenticated.sid.expect("shoul have sid value"),proxy) {
@@ -54,8 +52,7 @@ fn main() {
             println!("[+] Logged out :)");
         }
         Err(err) => {
-            println!("[-] unable to logout in due to error: {err}");
-            exit(1);
+            panic!("[-] unable to logout in due to error: {err}");
         }
     };
 

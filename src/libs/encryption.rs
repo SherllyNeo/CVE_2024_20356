@@ -29,7 +29,7 @@ fn key_fnv32(a: &str) -> Result<String> {
     Ok(e.to_string())
 }
 
-fn hash_fnv32(a: &str, b: &str) -> Result<String> {
+pub fn hash_fnv32(a: &str, b: &str) -> Result<String> {
     let mut e = 40389;
     let h = &a[..32];
     let f = h.len() / 4;
