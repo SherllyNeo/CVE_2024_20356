@@ -1,6 +1,7 @@
 mod libs;
 use libs::arguments::Args;
-use libs::requests::{login,logout,exec};
+use libs::arguments::Actions;
+use libs::actions::{login,logout};
 use libs::encryption::encrypt;
 use clap::Parser;
 use std::process::exit;
@@ -16,7 +17,7 @@ fn headers() {
  | |      | | | (___ | |     _____      ___ __   \n\
  | |      | |  \\___ \\| |    / _ \\ \\ /\\ / / '_ \\  \n\
  | |____ _| |_ ____) | |___| (_) \\ V  V /| | | | \n\
-  \\_____|_____|_____/ \\_____\\___/ \\_/\\_/ |_| |_| \n\
+  \\_____|_____|_____/ \\_____ \\___/ \\_/\\_/ |_| |_| \n\
 		\n");
 	println!("~ Because every vulnerability needs a cool tool");
 	println!("~ AThacker @ LRQA Nettitude | v1.0\nOxidized by SherllyNeo");
@@ -41,7 +42,14 @@ fn main() {
         }
     };
 
-    let logged_out = match logout() {
+    match args.action {
+        Actions::Test => println!("test"),
+        Actions::Cmd => println!("cmd {:?}",args.cmd),
+        Actions::Shell => println!("Shell"),
+        Actions::Dance => println!("Dance"),
+    }
+
+    match logout(&args.hostname,&authenticated.sid.expect("shoul have sid value"),proxy) {
         Ok(_) => {
             println!("[+] Logged out :)");
         }
