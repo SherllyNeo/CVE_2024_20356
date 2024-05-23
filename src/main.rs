@@ -1,7 +1,6 @@
 mod libs;
 use libs::arguments::Args;
-use libs::arguments::Actions;
-use libs::actions::{login,logout,handle_action};
+use libs::actions::{get_host_info, handle_action, login, logout};
 use libs::encryption::encrypt;
 use clap::Parser;
 use std::process::exit;
@@ -42,7 +41,14 @@ fn main() {
         }
     };
 
-    match handle_action(&args.action) {
+    if args.verbose {
+        match get_host_info(&args.hostname, &authenticated, proxy) {
+            Ok(_) => {},
+            Err(err) => eprintln!("unable to print host info {:?}",err)
+        };
+    }
+
+    match handle_action(&args.action,&args.hostname,&authenticated,proxy) {
         Ok(_) => println!("[+] {:?} worked",&args.action),
         Err(err) => eprintln!("[-] {:?} failed: {:?}",&args.action,err)
     }

