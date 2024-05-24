@@ -1,4 +1,6 @@
+use anyhow::{Result,Error};
 use clap::Parser;
+use regex::Regex;
 use serde::Serialize;
 
 #[derive(
@@ -24,12 +26,28 @@ impl ToString for Actions {
 }
 
 
+
+fn validate_hostname(host: &str) -> Result<String> {
+
+    let ip_address_format = Regex::new(r"\b((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(:(\d{1,4}))?\b")?;
+    let nonalpha = Regex::new(r"^[0-9.:]+$")?;
+    let nonalpha_check = nonalpha.is_match(host);
+    let ip_address_format_check = ip_address_format.is_match(host);
+    let valid = nonalpha_check && ip_address_format_check;
+    if valid {
+        Ok(host.to_string())
+    }
+    else {
+        Err(Error::msg("mst be in format 10.0.0.1 or 10.0.0.2:1337"))
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(arg_required_else_help(true))]
 #[command(version, about, long_about = None)]
 pub struct Args {
     /// Target hostname or IP address (format 10.0.0.1 or 10.0.0.2:1337) 
-    #[arg(short = 't', long = "host")]
+    #[arg(short = 't', long = "host",value_parser = validate_hostname)]
     pub hostname: String,
 
     /// Username 
