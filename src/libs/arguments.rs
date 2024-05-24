@@ -28,7 +28,6 @@ impl ToString for Actions {
 
 
 fn validate_hostname(host: &str) -> Result<String> {
-
     let ip_address_format = Regex::new(r"\b((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(:(\d{1,4}))?\b")?;
     let nonalpha = Regex::new(r"^[0-9.:]+$")?;
     let nonalpha_check = nonalpha.is_match(host);
@@ -70,5 +69,29 @@ pub struct Args {
     #[arg(short, long, default_value_t = false)]
     pub verbose: bool
 
+}
+
+
+
+#[test]
+fn validate_hostname_test() {
+    let test_cases = [
+        ("10.0.0.1",true),
+        ("10.0.0.1:1337",true),
+        ("10.0.0.1:aa",false),
+        ("255.255.255.255:1337",true),
+        ("256.255.255.255:1337",false),
+
+    ];
+
+    for case in test_cases {
+        let result = validate_hostname(case.0);
+        if case.1 {
+            assert!(result.is_ok());
+        }
+        else {
+            assert!(result.is_err());
+        }
+    }
 }
 
