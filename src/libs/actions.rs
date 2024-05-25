@@ -10,6 +10,7 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rand::Rng;
 use std::io::stdin;
 
+
 #[derive(Clone,Debug)]
 pub struct Authenticated {
     pub cookie: Option<String>,
@@ -55,7 +56,8 @@ pub fn login(target: &str, username: &str, password: &str, proxy: Option<&str>, 
 	let enc_password = encrypt(username, password,None)?;
     let enc_password_as_string = &enc_password;
     
-    let url = format!("https://{target}/data/login");
+    let url = format!("{target}/data/login");
+
 
 
     let payload = HashMap::from([
@@ -81,11 +83,11 @@ pub fn login(target: &str, username: &str, password: &str, proxy: Option<&str>, 
         return Err(Error::msg(format!("Something bad happened. Status: {:?}", response.status())));
     }
 
-    // This needs lots of testing
     let cookie_headers = response
-        .headers().clone()
-        .get("Set-Cookie")
-        .ok_or_else(|| Error::msg("Unable to find Set-Cookie in response headers"))?
+        .headers()
+        .clone()
+        .get("Set-Cookie") // needs to be lower case?
+        .context("should be able to get Set-Cookie")?
         .to_str()?
         .to_string();
 
@@ -93,25 +95,27 @@ pub fn login(target: &str, username: &str, password: &str, proxy: Option<&str>, 
     let response_raw = response.bytes()?.to_vec();
 
 
+
     let root = Element::from_reader(response_raw.as_slice())?;
 
     let auth_result = root.find("authResult")
-        .ok_or_else(|| Error::msg("Unable to find Set-Cookie in response headers"))?
+        .context("Unable to find authResult in response xml")?
         .text();
+
 
     if auth_result != "0" {
         return Err(Error::msg(format!("authResult is {auth_result} not 0")));
     }
 
     let admin_user_text = root.find("adminUser")
-        .ok_or_else(|| Error::msg("Unable to find adminUser element"))?
+        .context("Unable to find adminUser element")?
         .text();
 
     let admin_user = admin_user_text == "1";
 
 
     let sid = root.find("sidValue")
-        .ok_or_else(|| Error::msg("Unable to find sidValue element"))?
+        .context("Unable to find sidValue element")?
         .text();
 
     let cookie_value = extract_session_cookie(&cookie_headers)?;
@@ -129,7 +133,7 @@ pub fn login(target: &str, username: &str, password: &str, proxy: Option<&str>, 
 
 pub fn logout(target: &str, sid_value: &str,proxy: Option<&str>) -> Result<()> {
     println!("Logging out: {}XXXXXXXXXXXXXXXXXXXXXXXX",sid_value.get(0..8).context("sid value should be at least 8 characters long")?);
-    let url = format!("https://{target}/data/logout");
+    let url = format!("{target}/data/logout");
     let payload = HashMap::from([
         ("sessionID",sid_value)
     ]);
@@ -155,7 +159,8 @@ pub fn logout(target: &str, sid_value: &str,proxy: Option<&str>) -> Result<()> {
 }
 
 fn query(target: &str, authenticated: &Authenticated, input_cmd: &str, proxy: Option<&str>) -> Result<Element>{
-    let url = format!("https://{target}");
+    let url = target.to_string();
+
 
     let cmd = utf8_percent_encode(input_cmd, NON_ALPHANUMERIC).to_string();
 
@@ -168,7 +173,7 @@ fn query(target: &str, authenticated: &Authenticated, input_cmd: &str, proxy: Op
 
     let client_base = client
           .post(&url)
-          .header("Referer",format!("https://{target}/index.html"))
+          .header("Referer",format!("{target}/index.html"))
           .header("Cookie",format!("sessionCookie={}",authenticated.cookie.clone().unwrap()))
           .header("Accept-Encoding","identity")
           .header("Cspg_var",hash_fnv32(&authenticated.sid.clone().unwrap(),input_cmd).context("unable to hash sid and input")?)
@@ -255,9 +260,9 @@ fn exec(target: &str, authenticated: &Authenticated,cmd: &str, proxy: Option<&st
 
 
 
-    let url = format!("https://{target}/{web_file}");
+    let url = format!("{target}/{web_file}");
 	let response = client.get(&url)
-		.header("Referer",format!("https://{target}/index.html"))
+		.header("Referer",format!("{target}/index.html"))
         .header("Accept-Encoding", "identity")
         .send()?;
 
@@ -378,5 +383,44 @@ pub fn handle_action(action: &Actions,target: &str,authenticated: &Authenticated
     Ok(())
 }
 
+
+#[cfg(test)]
+mod tests {
+    use crate::libs::encryption::encrypt;
+    use httpmock::prelude::*;
+
+    use super::*;
+    #[test]
+    fn login_test() {
+
+        let server = MockServer::start();
+
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/data/login");
+            then.status(200)
+                .header("Set-Cookie", "sessionCookie=123456789012345678901234567890ab;")
+                .body("
+                       <?xml version=\"1.0\" encoding=\"UTF-8\"?>
+                       <data>
+                       <authResult>0</authResult>
+                       <adminUser>0</adminUser>
+                       <sidValue>SIDVALSIDVALSIDVAL</sidValue>
+                       </data>
+                ");
+        });
+
+
+
+
+        let auth = login(&server.url(""), "usertest123", "pass123", None, encrypt).unwrap();
+
+        mock.assert();
+        assert!(auth.sid.unwrap() == "SIDVALSIDVALSIDVAL");
+        assert!(auth.cookie.unwrap() == "123456789012345678901234567890ab");
+        assert!(!auth.admin_user);
+
+    }
+}
 
 

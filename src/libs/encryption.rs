@@ -1,4 +1,3 @@
-use aes::cipher::inout::PadError;
 use anyhow::{Error,Result,Context};
 use aes::Aes256;
 use aes::cipher::{block_padding::Pkcs7, BlockEncryptMut, KeyIvInit};
@@ -136,9 +135,6 @@ pub fn encrypt(username: &str, password: &str, salt: Option<Vec<u8>>) -> Result<
     let mut result = b"Salted__".to_vec();
     result.extend_from_slice(&salt);
     result.extend_from_slice(&ciphertext);
-
-    println!("parts: salt: {:?} encrypted_msg {:?}",salt,ciphertext);
-    println!("result: {:?}",result);
 
     Ok(BASE64_STANDARD.encode(result))
 }

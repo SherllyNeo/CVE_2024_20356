@@ -27,7 +27,9 @@ fn main() {
     let proxy = None;
     headers();
 
-    let authenticated = match login(&args.hostname,&args.username,&args.password,proxy,encrypt) {
+    let host = format!("https://{}",args.hostname);
+
+    let authenticated = match login(&host,&args.username,&args.password,proxy,encrypt) {
         Ok(auth) => {   
             println!("[+] Logged in");
             auth
@@ -39,18 +41,18 @@ fn main() {
     };
 
     if args.verbose {
-        match get_host_info(&args.hostname, &authenticated, proxy) {
+        match get_host_info(&host, &authenticated, proxy) {
             Ok(_) => {},
             Err(err) => eprintln!("unable to print host info {:?}",err)
         };
     }
 
-    match handle_action(&args.action,&args.hostname,&authenticated,args.cmd.as_deref(),proxy) {
+    match handle_action(&args.action,&host,&authenticated,args.cmd.as_deref(),proxy) {
         Ok(_) => println!("[+] {:?} worked",&args.action),
         Err(err) => eprintln!("[-] {:?} failed: {:?}",&args.action,err)
     }
 
-    match logout(&args.hostname,&authenticated.sid.expect("shoul have sid value"),proxy) {
+    match logout(&host,&authenticated.sid.expect("shoul have sid value"),proxy) {
         Ok(_) => {
             println!("[+] Logged out :)");
         }
