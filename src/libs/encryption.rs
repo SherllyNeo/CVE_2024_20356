@@ -1,3 +1,4 @@
+use aes::cipher::inout::PadError;
 use anyhow::{Error,Result,Context};
 use aes::Aes256;
 use aes::cipher::{block_padding::Pkcs7, BlockEncryptMut, KeyIvInit};
@@ -96,7 +97,8 @@ fn pad(data: &[u8], block_size: usize) -> Result<String> {
     let mut padded = Vec::with_capacity(data.len() + pad_len);
     padded.extend_from_slice(data);
     padded.extend(std::iter::repeat(pad_len as u8).take(pad_len));
-    Ok(String::from_utf8(padded)?)
+    let pad_str = String::from_utf8(padded)?;
+    Ok(pad_str)
 }
 
 
@@ -118,7 +120,8 @@ fn aes_encrypt(password: &str, key: Vec<u8>,iv: Vec<u8>) -> Result<Vec<u8>> {
         }
     };
 
-    Ok(ciphertext.to_vec())
+    let ciphertext = ciphertext[0..pt_len].to_vec();
+    Ok(ciphertext)
 }
 
 pub fn encrypt(username: &str, password: &str, salt: Option<Vec<u8>>) -> Result<String> {
@@ -134,6 +137,9 @@ pub fn encrypt(username: &str, password: &str, salt: Option<Vec<u8>>) -> Result<
     result.extend_from_slice(&salt);
     result.extend_from_slice(&ciphertext);
 
+    println!("parts: salt: {:?} encrypted_msg {:?}",salt,ciphertext);
+    println!("result: {:?}",result);
+
     Ok(BASE64_STANDARD.encode(result))
 }
 
@@ -144,6 +150,7 @@ mod tests {
 
     #[test]
     fn pad_test() {
+        let size = 16;
         let test_cases = [
             ("","\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}\u{10}"),
             ("test","test\u{0c}\u{0c}\u{0c}\u{0c}\u{0c}\u{0c}\u{0c}\u{0c}\u{0c}\u{0c}\u{0c}\u{0c}"),
@@ -151,7 +158,8 @@ mod tests {
             ("abcdefghijklmaopqrstuvwxyz","abcdefghijklmaopqrstuvwxyz\u{06}\u{06}\u{06}\u{06}\u{06}\u{06}")
         ];
         for case in test_cases {
-            assert_eq!(pad(case.0.as_bytes(),16).unwrap(),case.1);
+            assert_eq!(pad(case.0.as_bytes(),size).unwrap(),case.1);
+            assert!(pad(case.0.as_bytes(),size).unwrap().len() % 16 == 0);
         }
     }
 
@@ -193,12 +201,12 @@ mod tests {
     #[test]
     fn encrypt_test() {
         let test_cases = [
-            ("usernameusernameusernameusernameusernameusername","passwordusernameusernameusernameusernameusername","U2FsdGVkX19gXVQd8kXBiiG00MCQLLRThvTK9BxcK5OIuEFvBcwkI7m4itEfNhI16M2BBnv+0r8sn4AhOuFBVnQ5BoZPzCcXLuteysreSr8="),
-             ("username","password","U2FsdGVkX18WZSCkkgVIZpFJ5m3ExAPUmI33C4+JMq0="),
-             ("testusername","testpassword","U2FsdGVkX19Jw2bOvcimEspUaNQMdtCvHX0KkWH1158="),
-             ("","password","U2FsdGVkX1/AIHLaimqTbDA90yZtN47/n9B3DMvDUOk="),
-             ("username","","U2FsdGVkX1/Mhy95lysn8VqyxOp4u6Zdlp8mXqSYLDI="),
-            ("","","U2FsdGVkX1/y2D4EkZJFc2VRdp63C3b0EFk7mic1qpI=")
+            ("usernameusernameusernameusernameusernameusername","passwordusernameusernameusernameusernameusername","U2FsdGVkX18BAgMEBQYHCB7MAD8zjCvkEK2UvO9+0WfHZfRjfPUXEQ8jyvsRTrZ4KzgnOrrUr1CvbO+y5J47gfEOuHIY8H0Vy1XWbOVCjlM="),
+             ("username","password","U2FsdGVkX18BAgMEBQYHCFKsFp4aWIWcxc+hg3P2q1Y="),
+             ("testusername","testpassword","U2FsdGVkX18BAgMEBQYHCCWpE4RtNJrcXCZcWDSbxdQ="),
+             ("","password","U2FsdGVkX18BAgMEBQYHCFM8+c6Yw0Q8SEMZoBSkEVw="),
+             ("username","","U2FsdGVkX18BAgMEBQYHCGGZKkDqPlwyRyH7J/if4x8="),
+            ("","","U2FsdGVkX18BAgMEBQYHCHGE9HW3bUivdZIDGUHib/Y=")
              ];
 
         let salt: Vec<u8> = vec![0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08];
@@ -210,17 +218,21 @@ mod tests {
     #[test]
     fn aes_encrypt_test() {
         let key = "abcdefghijklmaopqrstuvwxyzaaaaaa".as_bytes().to_vec(); // must be 32 chars
+        let iv: Vec<u8> = "zyxwvutsrqponmlk".as_bytes().to_vec();
         assert!(key.len() == 32);
-        let iv: Vec<u8> = [0x01].to_vec();
+        assert!(iv.len() == 16);
         let test_cases = [
-                ("",""),
-                ("123",""),
-                ("1jajajssjsammaja",""),
-                ("abcdefghijklmaopqrstuvwxyz","")
+                ("",[192, 125, 157, 221, 192, 123, 85, 61, 112, 26, 41, 238, 23, 38, 88, 85].to_vec()),
+                ("123",[255, 239, 150, 146, 213, 151, 217, 225, 31, 88, 187, 39, 158, 99, 195, 115].to_vec()),
+                ("1jajajssjsammaja",[67, 116, 231, 52, 87, 85, 65, 75, 226, 6, 76, 216, 109, 212, 154, 80, 168, 55, 109, 131, 186, 129, 20, 47, 76, 244, 224, 209, 228, 151, 128, 181].to_vec()),
+                ("abcdefghijklmaopqrstuvwxyz",[141, 124, 113, 150, 68, 70, 169, 68, 83, 179, 146, 81, 18, 1, 1, 220, 95, 114, 180, 83, 14, 5, 163, 98, 139, 63, 82, 199, 51, 176, 128, 222].to_vec())
              ];
 
         for case in test_cases {
-            assert_eq!(String::from_utf8(aes_encrypt(case.0,key.clone(),iv.clone()).unwrap()).unwrap(),case.1);
+            assert_eq!(
+                aes_encrypt(case.0,key.clone(),iv.clone()).unwrap(),
+                case.1
+                )
         }
     }
 
