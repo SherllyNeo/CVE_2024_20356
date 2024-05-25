@@ -6,7 +6,7 @@ Written by Aaron and Oxidised by SherllyNeo
 Full technical details can be found at [https://labs.nettitude.com/blog/cve-2024-20356-jailbreaking-a-cisco-appliance-to-run-doom](https://labs.nettitude.com/blog/cve-2024-20356-jailbreaking-a-cisco-appliance-to-run-doom)
 
 ## Install
-```
+```bash
 cargo build --release && cp ./target/release/CVE_2024_20356 ~/.local/bin/
 ```
 
