@@ -62,7 +62,22 @@ test libs::encryption::tests::encrypt_test ... ok
 test libs::actions::tests::login_test ... ok 
 test libs::arguments::validate_hostname_test ... ok 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s 
+```
 
+
+## Project Structure 
+I put this here as I avoided using mod.rs and to show how main is a thin wrapper around lib.
+
+This is to allow for integration tests in the future.
+
+```bash
+src 
+├── lib.rs 
+├── libs 
+│   ├── actions.rs 
+│   ├── arguments.rs 
+│   └── encryption.rs 
+└── main.rs 
 ```
 
 
